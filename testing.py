@@ -6,9 +6,10 @@ from torch.nn import functional as F
 
 #Data is generated using tick package
 decays = [.3]
-baseline = [0.5, 0.1]
-adjacency = [[[0.1], [.0]],
-             [[0.3], [.3]]]
+baseline = [0.5, 0.1, 0.5]
+adjacency = [ [[0.1], [.0], [0]],
+              [[0],  [.3] , [0]],
+              [[0],  [0],  [0.5]] ]
 
 end_time = 100
 n_realizations = 100
@@ -37,6 +38,8 @@ t0, t1 =  torch.tensor([0]).cuda(), torch.tensor([end_time]).cuda()
 
 num_type = baseline.shape[0]
 num_decay = decays.shape[0]
+print("No of types=", num_type)
+print("Nof of decay=", num_decay)
 model = MultiVariateHawkesProcessModel(num_type, num_decay).cuda()
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
