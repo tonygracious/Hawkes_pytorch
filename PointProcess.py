@@ -35,7 +35,7 @@ class MultiVariateHawkesProcessModel(PointProcessModel):
         self.model_name = 'A MultiVariate Hawkes Process'
         self.num_decay = num_decay
         self.alpha = torch.nn.Parameter(torch.randn(self.num_type, self.num_type, self.num_decay) * 0.5 - 3.0)
-        self.beta =  torch.nn.Parameter(torch.randn(self.num_decay) * 0.5)
+        self.beta =  torch.nn.Parameter(torch.randn(self.num_decay) * 0.5 - 3.0)
 
     def forward(self, event_times, event_types, input_mask, t0, t1):
         """
@@ -60,37 +60,38 @@ class MultiVariateHawkesProcessModel(PointProcessModel):
         # diffs[i,j] = t_i - t_j for j < i (o.w. zero)
         dt = event_times[:, :, None] - event_times[:, None]  # (N, T, T)
         dt = fill_triu(dt, 0)
+        dt = dt.unsqueeze(1)  # (N,1,T,T)
 
         # kern[i,j] = omega* torch.exp(-omega*dt[i,j])
-        kern = omega * torch.exp(-omega * dt)
+        kern = omega.view(1,-1, 1, 1) * torch.exp(-omega.view(1,-1, 1, 1) * dt) #(N, num_decay, T, T)
 
-        colidx = event_types.unsqueeze(1).repeat(1, N, 1)
-        rowidx = event_types.unsqueeze(2).repeat(1, 1, N)
+        colidx = event_types.unsqueeze(1).repeat(1, N, 1) #(N, T, T)
+        rowidx = event_types.unsqueeze(2).repeat(1, 1, N) #(N, T, T)
 
-        Auu = Ahat[rowidx, colidx].squeeze(dim=3)
+        Auu = Ahat[rowidx, colidx].permute(0, 3, 1, 2) #(N, num_decay, T, T )
 
-        ag = Auu * kern
-        ag = fill_triu(ag, 0)
+        ag = Auu * kern #(N, num_decay, T, T )
+        ag = torch.tril(ag, diagonal=-1) # (N, num_decay, T, T ) lower triangular entries of (T, T) matrices
 
         # compute total rates of u_i at time i
-        rates = mu + torch.sum(ag, dim=2)
+        rates = mu + torch.sum(torch.sum(ag, dim=3), dim=1) #(N, T )
 
         #baseline \sum_i^dim \int_0^T \mu_i
-        compensator_baseline = (t1 - t0) * torch.sum(mhat)
+        compensator_baseline = (t1 - t0) * torch.sum(mhat) #(1)
 
         # \int_{t_i}^T \omega \exp{ -\omega (t - t_i )  }
-        log_kernel = -omega * (t1[:, None] - event_times)
-        Int_kernel = (1 - torch.exp(log_kernel)).unsqueeze(1)
+        log_kernel = -omega.view(1, -1, 1) * (t1[:, None] - event_times).unsqueeze(dim=1)  # (N, 2, T )
+        Int_kernel = (1 - torch.exp(log_kernel))
 
-        Au = Ahat[:, event_types].permute(1, 0, 2, 3).squeeze(3)
+        Au = Ahat[:, event_types].permute(1, 0, 3, 2) #(N, num_decay, num_decay, T )
 
-        Au_Int_kernel = (Au * Int_kernel).sum(dim=1) * input_mask
+        Au_Int_kernel = (Au * Int_kernel.unsqueeze(dim=1)).sum(dim=1).sum(dim=1)  * input_mask #(N, T)
 
-        compensator = compensator_baseline + Au_Int_kernel.sum(dim=1)
+        compensator = compensator_baseline + Au_Int_kernel.sum(dim=1) #(N, 1)
 
-        loglik = torch.log(rates + 1e-8).mul(input_mask).sum(-1)  #
+        loglik = torch.log(rates + 1e-8).mul(input_mask).sum(-1)  # (N, 1)
 
-        return (loglik, compensator)
+        return (loglik, compensator) # ((N,1), (N,1))
 
 
 

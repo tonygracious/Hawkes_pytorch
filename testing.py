@@ -3,7 +3,11 @@ from PointProcess import MultiVariateHawkesProcessModel
 import numpy as np
 import torch
 from torch.nn import functional as F
+from Utils.loss import  set_learning_rate, learning_rate_schedule
 
+#Parameter Setting
+clip = 1 #gradient clipping
+weight_decay = 1e-6 # weight decay
 
 
 #Data is generated using tick package
@@ -43,10 +47,10 @@ print("No of types=", num_type)
 print("Nof of decay=", num_decay)
 
 
-'''
+
 model = MultiVariateHawkesProcessModel(num_type, num_decay).cuda()
 
-optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
+optimizer = torch.optim.AdamW(model.parameters(),weight_decay=weight_decay, lr=0.01)
 
 loss_prev = 0
 for epoch in range(5000):
@@ -58,9 +62,10 @@ for epoch in range(5000):
     loglik = lbda - compensator
     loss = loglik.mean() * (-1)
     loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
     optimizer.step()
 
-    if epoch % 100 == 0:
+    if epoch % 10 == 0:
         estimation_error = torch.norm(F.softplus(model.mu).detach() - baseline) + \
                            torch.norm(F.softplus(model.alpha).detach() - adjacency) + \
                            torch.norm(F.softplus(model.beta).detach() - decays)
@@ -80,7 +85,7 @@ print("Original Adjacency Parameter: ", adjacency)
 print("Estimated Adjacency Parameter: ", F.softplus(model.alpha).detach() )
 
 
-'''
+
 
 
 

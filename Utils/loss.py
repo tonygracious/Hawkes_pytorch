@@ -16,6 +16,9 @@ def fill_triu(A, value):
     A = A + torch.triu(torch.ones_like(A)) * value
     return A
 
+
+
+
 class MaxLogLike(nn.Module):
     """
     The negative log-likelihood loss of events of point processes
@@ -68,3 +71,29 @@ class CrossEntropy(nn.Module):
         return self.entropy_loss(Lambda_t, c[:, 0])
 
 
+import math
+#Learning rate s
+def set_learning_rate(optimizer, lr):
+    for i, group in enumerate(optimizer.param_groups):
+        group['lr'] = lr
+
+def cosine_decay(learning_rate, global_step, decay_steps, alpha=0.0):
+    global_step = min(global_step, decay_steps)
+    cosine_decay = 0.5 * (1 + math.cos(math.pi * global_step / decay_steps))
+    decayed = (1 - alpha) * cosine_decay + alpha
+    return learning_rate * decayed
+
+
+def learning_rate_schedule(global_step, warmup_steps, base_learning_rate, train_steps):
+    warmup_steps = int(round(warmup_steps))
+    scaled_lr = base_learning_rate
+    if warmup_steps:
+        learning_rate = global_step / warmup_steps * scaled_lr
+    else:
+        learning_rate = scaled_lr
+
+    if global_step < warmup_steps:
+        learning_rate = learning_rate
+    else:
+        learning_rate = cosine_decay(scaled_lr, global_step - warmup_steps, train_steps - warmup_steps)
+    return learning_rate
